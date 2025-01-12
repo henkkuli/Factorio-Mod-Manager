@@ -128,6 +128,9 @@ def test_version_order():
         ('my mod > 1.2.3',
          Requirement(Prefix.NONE, 'my mod',
                      VersionComparison(Comparison.GT, Version(1, 2, 3)))),
+        # Incompatibility with a version. Not really allowed, but let's be
+        # liberal with what we allow.
+        ('! mod > 1.2.3', Requirement(Prefix.INCOMPATIBLE, 'mod', None)),
     ])
 def test_requirement_parse_valid(s, requirement):
     assert Requirement.parse(s) == requirement
@@ -136,8 +139,6 @@ def test_requirement_parse_valid(s, requirement):
 @pytest.mark.parametrize(
     's',
     [
-        # Incompatibility with a version
-        '! mod > 1.2.3',
         # Multiple version requirements
         'mod < 1.2.3 > 4.5.6'
     ])

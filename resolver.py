@@ -77,23 +77,33 @@ class Version:
                 raise ValueError('Invalid first argument')
         object.__setattr__(self, "parts", tuple(parts))
 
+    def __cmp(self, other: "Version",
+              comparator: Callable[[List[int], List[int]], bool]):
+
+        def extend(parts: Tuple[int, ...], length: int) -> List[int]:
+            return list(parts) + ([0] * (length - len(parts)))
+
+        length = max(len(self.parts), len(other.parts))
+        return comparator(extend(self.parts, length),
+                          extend(other.parts, length))
+
     def __lt__(self, other):
-        return self.parts < other.parts
+        return self.__cmp(other, lambda a, b: a < b)
 
     def __le__(self, other):
-        return self.parts <= other.parts
+        return self.__cmp(other, lambda a, b: a <= b)
 
     def __eq__(self, other):
-        return self.parts == other.parts
+        return self.__cmp(other, lambda a, b: a == b)
 
     def __ne__(self, other):
-        return self.parts != other.parts
+        return self.__cmp(other, lambda a, b: a != b)
 
     def __ge__(self, other):
-        return self.parts >= other.parts
+        return self.__cmp(other, lambda a, b: a >= b)
 
     def __gt__(self, other):
-        return self.parts > other.parts
+        return self.__cmp(other, lambda a, b: a > b)
 
     @staticmethod
     def parse(s: str) -> 'Version':
@@ -117,9 +127,6 @@ class Version:
 
     def __repr__(self) -> str:
         return str(self)
-
-
-# a = Version([1,2], 2)
 
 
 @dataclass(frozen=True)
@@ -192,8 +199,6 @@ class Requirement:
         # Parse version
         vercomp: Optional[VersionComparison] = None
         if s != '':
-            if prefix == Prefix.INCOMPATIBLE:
-                raise ValueError(f'Invalid requirement string: {orig}')
             comp: Comparison
             if s.startswith('<='):
                 comp = Comparison.LE
@@ -215,6 +220,10 @@ class Requirement:
             s = s.lstrip()
             version = Version.parse(s)
             vercomp = VersionComparison(comp, version)
+            if prefix == Prefix.INCOMPATIBLE:
+                # Doesn't really make sense. If someone wants to restrict the
+                # version to be sufficiently low, they should use < operator.
+                vercomp = None
 
         return Requirement(prefix, name, vercomp)
 
