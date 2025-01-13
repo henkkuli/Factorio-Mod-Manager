@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 from dataclasses import dataclass
-import functools
 from typing import Any, Dict, Iterable, List, Set, Tuple, no_type_check, override
 from resolver import Package, PackageProvider, PackageVersion, Requirement, Version
 import requests
@@ -10,6 +9,7 @@ from pathlib import Path
 from urllib.parse import quote
 from hashlib import sha1
 import json
+import subprocess
 
 MOD_PORTAL_URL = 'https://mods.factorio.com'
 INTERNAL_MODS = ['base', 'space-age', 'elevated-rails', 'quality']
@@ -158,6 +158,49 @@ def update_command(args):
     store_lock_file(args.lock, lock)
 
 
+def download_mod_to_target(mod: LockEntry, url: str, target: Path):
+    r = requests.get(url)
+    assert r.status_code == 200
+    assert r.headers['content-type'] == 'application/octet-stream'
+    data = r.content
+    assert sha1(data).hexdigest() == mod.sha1
+    open(target / f'{mod.name}_{mod.version}.zip', 'wb').write(data)
+
+
+def nix_prefetch_mod(mod: LockEntry, url: str):
+    # Convert sha1 hash in hex into Nix's base32
+    # https://github.com/NixOS/nix/blob/01f5cf2c02c2df066cf5965c8cc1c5b40d3878d2/src/libutil/hash.cc#L83-L103
+    def sha1_to_nix(sha1: str) -> str:
+        ALPHABET = '0123456789abcdfghijklmnpqrsvwxyz'
+        h = bytearray.fromhex(sha1)
+        res = []
+        for n in reversed(range(32)):
+            b = n * 5
+            i = b // 8
+            j = b % 8
+            c = (h[i] >> j) | (0 if i >= 19 else h[i + 1] << (8 - j))
+
+            res += ALPHABET[c & 31]
+
+        return ''.join(res)
+    
+    name = mod.name.replace(' ', '_')
+
+    proc = subprocess.run([
+        'nix-prefetch-url', '--type', 'sha1', '--name', f'{name}.zip', url,
+        sha1_to_nix(mod.sha1)
+    ],
+                          capture_output=True,
+                          encoding='utf-8')
+    
+    if proc.returncode != 0:
+        print('Failed to fetch:')
+        print(proc.stdout)
+        print(proc.stderr)
+        exit(2)
+
+
+
 def install_command(args):
     lock: List[LockEntry]
     try:
@@ -171,18 +214,22 @@ def install_command(args):
         exit(1)
 
     for mod in lock:
-        url = f'{MOD_PORTAL_URL}{mod.download_url}?username={quote(args.username)}&token={quote(args.token)}'
         print(f'Downloading {mod.name} {mod.version}')
-        r = requests.get(url)
-        assert r.status_code == 200
-        assert r.headers['content-type'] == 'application/octet-stream'
-        data = r.content
-        assert sha1(data).hexdigest() == mod.sha1
-        open(args.target / f'{mod.name}_{mod.version}.zip', 'wb').write(data)
+        url = f'{MOD_PORTAL_URL}{mod.download_url}?username={quote(args.username)}&token={quote(args.token)}'
+        if args.nix_prefetch:
+            nix_prefetch_mod(mod, url)
+        else:
+            download_mod_to_target(mod, url, args.target)
 
-    # Write a mod list so that the game knows which mods to enable
-    modlist = {'mods': [{'name': mod.name, 'enabled': True} for mod in lock]}
-    json.dump(modlist, open(args.target / f'mod-list.json', 'w'))
+    if not args.nix_prefetch:
+        # Write a mod list so that the game knows which mods to enable
+        modlist = {
+            'mods': [{
+                'name': mod.name,
+                'enabled': True
+            } for mod in lock]
+        }
+        json.dump(modlist, open(args.target / f'mod-list.json', 'w'))
 
 
 def main():
@@ -229,6 +276,12 @@ def main():
         type=str,
         help='Factorio token; can be generated on Factorio.com',
         required=True)
+    install_parser.add_argument(
+        '--nix-prefetch',
+        action=argparse.BooleanOptionalAction,
+        help=
+        'instead of installing the mods to target directory, prefetch them using nix-prefetch-url'
+    )
     install_parser.set_defaults(func=install_command)
 
     args = parser.parse_args()
