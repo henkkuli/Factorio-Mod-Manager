@@ -138,7 +138,8 @@ def load_lock_file(file: Path) -> List[LockEntry]:
 
 
 def store_lock_file(file: Path, lock: List[LockEntry]):
-    file.open('w').write(LockEntryEncoder().encode(lock))
+    lock = sorted(lock, key=lambda entry: entry.name)
+    file.open('w').write(LockEntryEncoder(indent=4).encode(lock))
 
 
 def update(mods: List[Requirement],
