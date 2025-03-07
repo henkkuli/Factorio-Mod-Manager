@@ -10,6 +10,7 @@ from urllib.parse import quote
 from hashlib import sha1
 import json
 import subprocess
+import re
 
 MOD_PORTAL_URL = 'https://mods.factorio.com'
 INTERNAL_MODS = ['base', 'space-age', 'elevated-rails', 'quality']
@@ -90,6 +91,11 @@ class FactorioModProvider(PackageProvider):
 
 def load_mod_list(file: Path) -> List[Requirement]:
     lines = file.open('r').readlines()
+    # Remove comments
+    comment_matcher = r"#.*$"
+    lines = [re.sub(comment_matcher, '', line).strip() for line in lines]
+    # Remove empty lines
+    lines = [line for line in lines if line]
     return [Requirement.parse(line) for line in lines]
 
 
