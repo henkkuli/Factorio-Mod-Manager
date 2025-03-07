@@ -189,7 +189,7 @@ def nix_prefetch_mod(mod: LockEntry, url: str):
             res += ALPHABET[c & 31]
 
         return ''.join(res)
-    
+
     name = mod.name.replace(' ', '_')
 
     proc = subprocess.run([
@@ -198,13 +198,12 @@ def nix_prefetch_mod(mod: LockEntry, url: str):
     ],
                           capture_output=True,
                           encoding='utf-8')
-    
+
     if proc.returncode != 0:
         print('Failed to fetch:')
         print(proc.stdout)
         print(proc.stderr)
         exit(2)
-
 
 
 def install_command(args):
