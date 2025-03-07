@@ -203,3 +203,29 @@ def test_provider_resolve_optional():
                                  provider.find("b")[Version(0, 0, 0)],
                                  provider.find("c")[Version(0, 0, 0)],
                              }
+
+
+def test_provider_newest_incompatible():
+    provider = StaticPackageProvider([
+        Package('a', [(Version(0, 0, 0), [
+            Requirement.parse("b"),
+            Requirement.parse("c"),
+        ])]),
+        Package(
+            'b',
+            [
+                (
+                    Version(1, 0, 0),
+                    [
+                        Requirement.parse("c = 1"),  # Incompatible
+                    ]),
+                (Version(0, 0, 0), [])
+            ]),
+        Package('c', [(Version(0, 0, 0), [])]),
+    ])
+
+    assert provider.resolve([Requirement.parse("a")]) == {
+        provider.find("a")[Version(0, 0, 0)],
+        provider.find("b")[Version(0, 0, 0)],
+        provider.find("c")[Version(0, 0, 0)],
+    }

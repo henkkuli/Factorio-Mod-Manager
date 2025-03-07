@@ -332,30 +332,31 @@ class PackageProvider(metaclass=ABCMeta):
 
             # Try all versions until a match is found
             for pkgver in versions:
-                # Check that already-selected packages satisfy requirements
-                for dep in pkgver.dependencies:
-                    if dep.name in selected:
-                        if not requirement_to_fun(dep, None)(
-                                selected[dep.name]):
-                            raise InconsistentRequirements
-
-                # Add new requirements
-                newreqs = reqs.new_child({
-                    dep.name:
-                    requirement_to_fun(dep, reqs.get(dep.name))
-                    for dep in pkgver.dependencies
-                })
-                # Lock the version of this package
-                newreqs[package.name] = lambda pv: pv.version == pkgver.version
-                # Copy worklist
-                newpackages = packages.copy()
-                newpackages.extend(
-                    self.find(dep.name) for dep in pkgver.dependencies
-                    if dep.is_required and not dep.name in selected)
-                # Add new version to selected
-                newselected = selected.copy()
-                newselected[package.name] = pkgver
                 try:
+                    # Check that already-selected packages satisfy requirements
+                    for dep in pkgver.dependencies:
+                        if dep.name in selected:
+                            if not requirement_to_fun(dep, None)(
+                                    selected[dep.name]):
+                                raise InconsistentRequirements
+
+                    # Add new requirements
+                    newreqs = reqs.new_child({
+                        dep.name:
+                        requirement_to_fun(dep, reqs.get(dep.name))
+                        for dep in pkgver.dependencies
+                    })
+                    # Lock the version of this package
+                    newreqs[
+                        package.name] = lambda pv: pv.version == pkgver.version
+                    # Copy worklist
+                    newpackages = packages.copy()
+                    newpackages.extend(
+                        self.find(dep.name) for dep in pkgver.dependencies
+                        if dep.is_required and not dep.name in selected)
+                    # Add new version to selected
+                    newselected = selected.copy()
+                    newselected[package.name] = pkgver
                     yield from search(newpackages, newreqs, newselected)
                 except InconsistentRequirements:
                     pass
