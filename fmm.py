@@ -24,11 +24,12 @@ class FactorioModVersion(PackageVersion):
     # dependencies: Tuple[Requirement, ...]
     package: 'FactorioMod'
     download_url: str
+    file_name: str
     sha1: str
 
     def __hash__(self) -> int:
         return hash((self.name, self.version, self.dependencies,
-                     self.download_url, self.sha1))
+                     self.download_url, self.file_name, self.sha1))
 
 
 @dataclass(frozen=True)
@@ -38,14 +39,14 @@ class FactorioMod(Package):
 
     def __init__(self, name: str,
                  versions: Iterable[Tuple[Version, Iterable[Requirement], str,
-                                          str]]):
+                                          str, str]]):
         object.__setattr__(self, 'name', name)
         object.__setattr__(
             self, 'releases',
             tuple(
                 FactorioModVersion(self, version, tuple(dependencies), url,
-                                   sha1)
-                for version, dependencies, url, sha1 in versions))
+                                   file_name, sha1)
+                for version, dependencies, url, file_name, sha1 in versions))
 
 
 def load_package(modname: str) -> FactorioMod:
@@ -58,7 +59,7 @@ def load_package(modname: str) -> FactorioMod:
     assert data['name'] == modname
     versions = [(Version.parse(release['version']), [
         Requirement.parse(dep) for dep in release['info_json']['dependencies']
-    ], release['download_url'], release['sha1'])
+    ], release['download_url'], release['file_name'], release['sha1'])
                 for release in data['releases']]
 
     return FactorioMod(modname, versions)
@@ -75,7 +76,7 @@ class FactorioModProvider(PackageProvider):
             return self.package_cache[name]
 
         if name in INTERNAL_MODS:
-            return FactorioMod(name, [(self.game_version, [], '', '')])
+            return FactorioMod(name, [(self.game_version, [], '', '', '')])
 
         print(f'Getting info for mod {name}')
         package = load_package(name)
@@ -104,6 +105,7 @@ class LockEntry:
     name: str
     version: Version
     download_url: str
+    file_name: str
     sha1: str
 
 
@@ -123,10 +125,11 @@ class LockEntryDecoder(json.JSONDecoder):
     def __init__(self):
 
         def object_hook(val: Dict[str, Any]) -> LockEntry | Dict[str, Any]:
-            if 'name' in val and 'version' in val and 'download_url' in val and 'sha1' in val:
+            if 'name' in val and 'version' in val and 'download_url' in val and 'file_name' in val and 'sha1' in val:
                 return LockEntry(name=val['name'],
                                  version=Version.parse(val['version']),
                                  download_url=val['download_url'],
+                                 file_name=val['file_name'],
                                  sha1=val['sha1'])
             return val
 
@@ -153,6 +156,7 @@ def update(mods: List[Requirement],
         LockEntry(name=mod.name,
                   version=mod.version,
                   download_url=mod.download_url,
+                  file_name=mod.file_name,
                   sha1=mod.sha1) for mod in resolved
     ]
     lock.sort(key=lambda entry: entry.name)
@@ -171,7 +175,7 @@ def download_mod_to_target(mod: LockEntry, url: str, target: Path):
     assert r.headers['content-type'] == 'application/octet-stream'
     data = r.content
     assert sha1(data).hexdigest() == mod.sha1
-    open(target / f'{mod.name}_{mod.version}.zip', 'wb').write(data)
+    open(target / mod.file_name, 'wb').write(data)
 
 
 def nix_prefetch_mod(mod: LockEntry, url: str):
@@ -191,10 +195,8 @@ def nix_prefetch_mod(mod: LockEntry, url: str):
 
         return ''.join(res)
 
-    name = mod.name.replace(' ', '_')
-
     proc = subprocess.run([
-        'nix-prefetch-url', '--type', 'sha1', '--name', f'{name}.zip', url,
+        'nix-prefetch-url', '--type', 'sha1', '--name', mod.file_name, url,
         sha1_to_nix(mod.sha1)
     ],
                           capture_output=True,
