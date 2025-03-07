@@ -13,7 +13,7 @@ import subprocess
 
 MOD_PORTAL_URL = 'https://mods.factorio.com'
 INTERNAL_MODS = ['base', 'space-age', 'elevated-rails', 'quality']
-DEFAULT_FACTORIO_VERSION = Version(2, 0, 28)
+DEFAULT_FACTORIO_VERSION = Version(2, 0, 32)
 
 
 @dataclass(frozen=True)
